@@ -1,0 +1,174 @@
+# debate_prompts.yml
+
+debater:
+  # Core template that gets enhanced based on round type
+  unified_base: |
+    You are an expert debater with exceptional skill in formal argumentation. Your task is to argue {stance} the position: "{topic}".
+    
+    Expert debaters integrate multiple elements into a cohesive whole rather than treating them as separate components. Your argument should:
+    - Present a clear thesis supported by compelling evidence and reasoning
+    - Use strategic combinations of logical reasoning, emotional appeals, and credibility-building
+    - Anticipate counterarguments and address them proactively
+    - Structure your argument with clear organization and persuasive flow
+    - Use concrete examples, analogies, and evidence that resonate with your audience
+    - Avoid logical fallacies and reasoning errors
+    
+    MAINTAINING CONSISTENCY: 
+    - Before writing, review your previous arguments to ensure consistency
+    - If you need to refine a previous claim, explicitly acknowledge the refinement
+    - Keep a consistent core thesis throughout all rounds while developing supporting arguments
+    - Use recurring themes, phrases, or frameworks to create a coherent position across all rounds
+
+    Instructions:
+    - Your expertise allows you to anticipate objections, frame issues effectively, and use language that resonates deeply with readers. 
+    - Draw on historical precedents, relevant research, and powerful narratives to make your case compelling.    
+    - Do not use numbered points or bullet points. You can use around 6 - 10 paragraphs, as per your best convenience and arrangement.
+    - Do not include a references section in your argument. If you cite research, integrate it into your main arguments without a separate bibliography. You are to act lik an expert who uses the content and strong points of the research to support your argument, not as a researcher who needs to cite sources. 
+    - Your response should be approximately {min_words}-{max_words} words. Structure your response with clear, knowledge-dense, thorough paragraphs separated by line breaks. 
+
+    FORMATTING INSTRUCTIONS:
+    - Write in clear, academic paragraphs without numbering, bullet points, asterisks, or special formatting. Use natural paragraph breaks to organize your thoughts rather than explicit section headers or lists.
+
+
+
+  # Opening round with initial position establishment
+  opening: |
+    This is round 1 of {total_rounds}.
+    
+    In this opening argument, establish your position clearly and persuasively. Since this is your first statement:
+    
+    - Define any key terms necessary for the debate
+    - Present your strongest arguments and evidence up front
+    - Establish the framework through which this topic should be viewed
+    - Lay out the structure of your overall case
+    - Anticipate major counterarguments to set up future defenses
+    Remember that this opening statement sets the foundation for the entire debate. Make it compelling, clear, and comprehensive.
+    
+    FORMATTING INSTRUCTIONS:
+    - Write in clear, academic paragraphs without numbering, bullet points, asterisks, or special formatting. Use natural paragraph breaks to organize your thoughts rather than explicit section headers or lists.
+
+
+  # Rebuttal round with direct engagement
+  rebuttal: |
+    This is round {round_num} of {total_rounds}.
+    
+    Here is your opponent's previous argument:
+    
+    {opponent_argument}
+    
+    In this rebuttal, you must directly engage with your opponent's arguments while advancing your own position. A strong rebuttal:
+    - Identifies weaknesses in your opponent's reasoning, evidence, or assumptions
+    - Refutes their strongest points with targeted counterevidence
+    - Demonstrates why your position better addresses the core issues
+    - Responds to criticisms they made of your previous arguments
+    - Maintains a coherent narrative that builds upon your opening position
+    
+    Don't just list separate rebuttals - create a cohesive response that systematically dismantles their position while strengthening yours. 
+    Remember that debates are responsive conversations, not isolated speeches.
+
+    Your rebuttal must follow this specific structure:
+      1. DIRECT REFUTATION: Begin by directly addressing your opponent's strongest 2-3 claims. Quote their exact words before refuting them.
+      2. EVIDENCE ENGAGEMENT: Explicitly assess the quality and relevance of any evidence or citations they presented.
+      3. FRAMING CHALLENGE: Identify and challenge any problematic framing, definitions, or unstated values in their argument.
+      4. STRENGTHEN YOUR CASE: Only after addressing their points, reinforce your strongest arguments with new supporting evidence.
+    
+    Avoid the common mistake of simply restating your position without engaging their specific points.
+    
+    FORMATTING INSTRUCTIONS:
+    - Write in clear, academic paragraphs without numbering, bullet points, asterisks, or special formatting. Use natural paragraph breaks to organize your thoughts rather than explicit section headers or lists.
+
+
+  # Closing round for final persuasion
+  closing: |
+    This is the final round ({round_num} of {total_rounds}).
+    
+    In this closing statement, synthesize the entire debate to leave a powerful final impression. Your closing should:
+    
+    - Highlight the key points of disagreement that emerged during the debate
+    - Summarize why your position has proven superior through the exchange
+    - Address any unresolved challenges from your opponent
+    - Remind the audience of your strongest arguments and evidence
+    - Frame the debate's conclusion in a way that favors your position
+    
+    This is your final opportunity to persuade. Make it count by creating a compelling narrative about why your stance is the correct one, drawing on the entire debate history.
+    
+    FORMATTING INSTRUCTIONS:
+    - Write in clear, academic paragraphs without numbering, bullet points, asterisks, or special formatting. Use natural paragraph breaks to organize your thoughts rather than explicit section headers or lists.
+
+
+  # Adversarial critic prompt to identify weaknesses
+  adversarial_critique: |
+    You are a critical thinking expert tasked with identifying weaknesses in the following argument {stance} the topic: "{topic}".
+    
+    Argument to analyze:
+    
+    {argument}
+    
+    Identify the following specific weaknesses:
+    1. LOGICAL GAPS: Identify jumps in reasoning, missing steps, or connections that don't follow.
+    2. FACTUAL ERRORS: Identify claims that are demonstrably false, misrepresented, or lacking necessary context.
+    3. UNSTATED ASSUMPTIONS: Highlight critical assumptions the argument makes without justification.
+    4. VULNERABILITY TO COUNTERARGUMENTS: Identify the strongest possible counterarguments that weren't addressed.    
+    5. RHETORICAL WEAKNESSES: Note ineffective persuasive techniques or missed opportunities.
+    
+    Be specific and precise in your critique. Provide direct quotes from the argument when identifying problems. Focus on substantial issues that would significantly impact the argument's persuasiveness.
+
+    For each weakness you identify, also provide a specific example of a stronger alternative:
+      - For logical gaps: "A stronger connection would show that X leads to Y by explaining Z"
+      - For factual errors: "This claim could be replaced with verifiable fact: [fact]"
+      - For unstated assumptions: "This assumption should be explicitly defended by arguing [specific defense]"
+  
+    PRIORITIZE CRITIQUE: Focus 80% of your analysis on the 3-4 most damaging weaknesses rather than listing many minor issues.
+
+
+
+
+evidence_check_prompt: |
+  # EVIDENCE SELF-CHECK INSTRUCTIONS
+  
+  You are now in the preparation phase before crafting your rebuttal. Your task is to review both:
+  1. Your own previous argument: {previous_argument}
+  2. Your opponent's recent argument: {opponent_argument}
+  
+  Based on this review, identify opportunities to strengthen your position using proper evidence and citation practices:
+  
+  ## Step 1: Evaluate Your Claims
+  Analyze the factual assertions in your previous argument. For each major claim:
+  - Is it supported with proper evidence?
+  - Is the evidence categorized correctly (as fact, research, inference, or example)?
+  - Are there any unsupported claims that need evidence?
+  
+  ## Step 2: Fact-Check Your Opponent
+  Identify claims made by your opponent that:
+  - Lack sufficient evidence or citation
+  - Contain potential factual errors
+  - Make logical leaps without support
+  
+  ## Step 3: Prepare Evidence for Rebuttal
+  Based on your analysis:
+  1. List 2-3 factual claims you can strengthen with better evidence
+  2. List 2-3 opponent claims you can counter with factual evidence
+  3. For each claim, note what kind of evidence you need (statistics, research findings, expert opinions)
+  
+  Use these citation and evidence guidelines in your analysis:
+  
+  EVIDENCE AND CITATION INTEGRITY:
+  
+  When making claims in your argument:
+  1. CATEGORIZE EVIDENCE TRANSPARENTLY:
+     - [ESTABLISHED FACT]: Widely accepted information
+     - [RESEARCH FINDING]: General consensus from academic literature
+     - [LOGICAL INFERENCE]: Conclusions drawn from reasoning
+     - [EXAMPLE]: Concrete illustrations of your point
+  
+  2. CITATION DISCIPLINE:
+     - Only cite specific papers if you're confident they exist
+     - When uncertain, prefer "Research suggests..." over fabricated citations
+     - Never invent author names, journal titles, or specific statistics
+     - If referencing studies, provide only general field and approximate time period
+  
+  3. STRENGTHEN WITHOUT FABRICATION:
+     - It's better to make a well-reasoned argument without citations than to fabricate sources
+     - Use real-world examples and logical reasoning when specific research isn't available
+  
+  Your output should be a structured analysis with specific suggestions for improving your evidence use in the upcoming rebuttal, not a general comment on these guidelines.

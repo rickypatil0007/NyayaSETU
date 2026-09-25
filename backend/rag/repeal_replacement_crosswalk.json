@@ -1,0 +1,64 @@
+{
+  "repeals": [
+    {
+      "original_name": "Payment of Gratuity Act, 1972",
+      "status": "repealed",
+      "superseded_by": "Code on Social Security, 2020",
+      "superseded_by_source_id": "code_on_social_security_2020"
+    },
+    {
+      "original_name": "Income-tax Act, 1961",
+      "status": "repealed",
+      "superseded_by": "Income-tax Act, 2025",
+      "superseded_by_source_id": "income_tax_act_2025"
+    },
+    {
+      "original_name": "Indian Penal Code",
+      "status": "repealed",
+      "superseded_by": "Bharatiya Nyaya Sanhita, 2023",
+      "superseded_by_source_id": "bharatiya_nyaya_sanhita_2023"
+    },
+    {
+      "original_name": "IPC",
+      "status": "repealed",
+      "superseded_by": "Bharatiya Nyaya Sanhita, 2023",
+      "superseded_by_source_id": "bharatiya_nyaya_sanhita_2023"
+    },
+    {
+      "original_name": "Code of Criminal Procedure",
+      "status": "repealed",
+      "superseded_by": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+      "superseded_by_source_id": "bharatiya_nagarik_suraksha_sanhita_2023"
+    },
+    {
+      "original_name": "CrPC",
+      "status": "repealed",
+      "superseded_by": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+      "superseded_by_source_id": "bharatiya_nagarik_suraksha_sanhita_2023"
+    },
+    {
+      "original_name": "Indian Evidence Act",
+      "status": "repealed",
+      "superseded_by": "Bharatiya Sakshya Adhiniyam, 2023",
+      "superseded_by_source_id": "bharatiya_sakshya_adhiniyam_2023"
+    },
+    {
+      "original_name": "Industrial Disputes Act",
+      "status": "repealed",
+      "superseded_by": "Industrial Relations Code, 2020",
+      "superseded_by_source_id": "industrial_relations_code_2020"
+    },
+    {
+      "original_name": "Contract Labour Act",
+      "status": "repealed",
+      "superseded_by": "Occupational Safety, Health and Working Conditions Code, 2020",
+      "superseded_by_source_id": "osh_code_2020"
+    },
+    {
+      "original_name": "Factories Act",
+      "status": "repealed",
+      "superseded_by": "Occupational Safety, Health and Working Conditions Code, 2020",
+      "superseded_by_source_id": "osh_code_2020"
+    }
+  ]
+}

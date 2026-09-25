@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+env/
+venv/
+api/venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.cache/
+.vscode/
+scratch/
+scratch_pdfs/
+scratch_repos/
+*.db

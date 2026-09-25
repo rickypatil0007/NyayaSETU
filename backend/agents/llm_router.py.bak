@@ -1,0 +1,428 @@
+import os
+import io
+import sys
+import json
+import time
+import threading
+import logging
+from typing import Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Load env variables from env/.env
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "env", ".env"), override=True)
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+    print("Please install google-generativeai: pip install google-generativeai")
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+    print("Please install openai: pip install openai")
+
+# ---------------------------------------------------------------------------
+# Module-level logger that writes UTF-8 regardless of the Windows console
+# codepage.  All LLM router diagnostics go through this logger instead of
+# bare print() calls, which crash on cp1252 when the model returns em-dashes,
+# curly quotes, or Indic script.
+# ---------------------------------------------------------------------------
+_logger = logging.getLogger("nyayasetu.llm_router")
+if not _logger.handlers:
+    _handler = logging.StreamHandler(
+        stream=io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="backslashreplace")
+    )
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(_handler)
+    _logger.setLevel(logging.INFO)
+
+
+class _ProviderCircuitBreaker:
+    def __init__(self, threshold: int = 2, cooldown_sec: float = 60.0):
+        self._failures: Dict[str, int] = {}
+        self._last_failure: Dict[str, float] = {}
+        self._permanent: Dict[str, bool] = {}
+        self._threshold = threshold
+        self._cooldown = cooldown_sec
+        self._lock = threading.Lock()
+
+    def record_failure(self, model_name: str, error_msg: str = "") -> None:
+        with self._lock:
+            # Check for permanent configuration errors
+            err = error_msg.lower()
+            if any(x in err for x in ["401", "403", "unauthorized", "invalid api key", "invalid model", "not found"]):
+                self._permanent[model_name] = True
+            
+            self._failures[model_name] = self._failures.get(model_name, 0) + 1
+            self._last_failure[model_name] = time.time()
+
+    def record_success(self, model_name: str) -> None:
+        with self._lock:
+            self._failures[model_name] = 0
+            self._permanent[model_name] = False
+
+    def is_tripped(self, model_name: str) -> bool:
+        with self._lock:
+            if self._permanent.get(model_name, False):
+                return True
+                
+            failures = self._failures.get(model_name, 0)
+            if failures >= self._threshold:
+                # Check cooldown (HALF_OPEN state)
+                last_time = self._last_failure.get(model_name, 0)
+                if time.time() - last_time > self._cooldown:
+                    # Allow 1 attempt (half-open). If it fails, it will record_failure again and update last_time.
+                    return False
+                return True
+            return False
+
+
+class LLMRouter:
+    """
+    Routes LLM requests to NVIDIA endpoints first, falling back to Gemini.
+
+    Reliability features (v2 — hardening pass):
+      • Per-provider circuit breaker — skip providers that have already
+        failed twice in this audit, eliminating redundant 10–15 s waits.
+      • Global logical-call deadline — a single generate_json_response()
+        call never exceeds LOGICAL_CALL_DEADLINE_SECONDS, regardless of
+        how many providers are attempted.
+      • True request cancellation — uses requests.Session with tight
+        (connect, read) timeouts so the OS socket is released when the
+        timeout fires.  No orphan ThreadPoolExecutor workers.
+      • Lossless Unicode — logging uses a UTF-8 stream wrapper; JSON
+        parsing preserves all Unicode characters faithfully.
+      • Call instrumentation — every provider attempt is recorded with
+        timing and outcome metadata.
+    """
+
+    # Class-level constants (can be overridden via env)
+    CONNECT_TIMEOUT = float(os.environ.get("NVIDIA_CONNECT_TIMEOUT", "3.0"))
+    READ_TIMEOUT = float(os.environ.get("NVIDIA_READ_TIMEOUT", "15.0"))
+    LOGICAL_CALL_DEADLINE_SECONDS = float(os.environ.get("LLM_CALL_DEADLINE", "300.0"))
+
+    def __init__(self):
+        # NVIDIA setup (Priority 1)
+        self.nvidia_configs = []
+        nvidia_models_list = [
+            ("NVIDIA_NEMOTRON_3_SUPER_120B_API_KEY", "nvidia/nemotron-3-super-120b-a12b"),
+            ("NVIDIA_NEMOTRON_3_ULTRA_550B_API_KEY", "nvidia/nemotron-3-ultra-550b-a55b"),
+            ("NVIDIA_GPT_OSS_20B_API_KEY", "openai/gpt-oss-20b")
+        ]
+
+        for env_var, model_id in nvidia_models_list:
+            api_key = os.environ.get(env_var)
+            if api_key:
+                self.nvidia_configs.append({
+                    "api_key": api_key,
+                    "model_name": model_id
+                })
+
+        # Gemini setup (Fallback)
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        self.gemini_model_name = "models/gemini-3.5-flash"
+        
+        if self.gemini_api_key and genai:
+            genai.configure(api_key=self.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(self.gemini_model_name)
+        else:
+            self.gemini_model = None
+
+        # Per-instance circuit breaker (scoped to this audit's LLMRouter)
+        self._breaker = _ProviderCircuitBreaker(threshold=2)
+
+        # Per-instance call instrumentation log
+        self.call_log: list = []
+
+        # Reusable requests.Session — connection pooling, no orphan threads
+        import requests
+        self._session = requests.Session()
+
+    def generate_json_response(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        """
+        Attempts NVIDIA APIs first using requests.Session with tight socket-
+        level timeouts (no ThreadPoolExecutor, no orphan threads).  If all
+        NVIDIA providers fail or the global deadline is reached, falls back
+        to Gemini.
+        """
+        import requests as _requests_module   # for exception types
+
+        full_prompt = f"{system_prompt}\n\nUser Input:\n{user_prompt}\n\nPlease respond ONLY with valid JSON."
+        
+        call_start = time.monotonic()
+        deadline = call_start + self.LOGICAL_CALL_DEADLINE_SECONDS
+        logical_call_id = f"llm-{id(self)}-{int(time.monotonic()*1000)}"
+
+        # ---------------------------------------------------------------
+        # 1. Try NVIDIA providers
+        # ---------------------------------------------------------------
+        invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+        # Prioritize healthy models, keeping static fallback order
+        healthy_models = [p for p in self.nvidia_configs if not self._breaker.is_tripped(p["model_name"])]
+        tripped_models = [p for p in self.nvidia_configs if self._breaker.is_tripped(p["model_name"])]
+            
+            
+        prioritized_configs = healthy_models + tripped_models
+
+        for idx, provider in enumerate(prioritized_configs):
+            if time.monotonic() > deadline:
+                _logger.info("--> Logical call deadline exceeded during NVIDIA fallback loop.")
+                break
+                
+            api_key = provider["api_key"]
+            model_name = provider["model_name"]
+
+            # Circuit breaker — skip providers that already failed twice
+            if self._breaker.is_tripped(model_name):
+                _logger.info(f"--> Skipping {model_name} (circuit breaker tripped)")
+                continue
+
+            attempt_record = {
+                "logical_call_id": logical_call_id,
+                "provider": "nvidia",
+                "model": model_name,
+                "attempt": idx + 1,
+                "start": time.time(),
+            }
+
+            try:
+                _logger.info(f"--> Trying NVIDIA model: {model_name}")
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Accept": "application/json"
+                }
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt + "\n\nPlease respond ONLY with a raw, valid JSON object (no markdown, no backticks, just the {})."}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "stream": False
+                }
+
+                # Apply model-specific kwargs requested by the user
+                if model_name == "moonshotai/kimi-k3":
+                    payload["reasoning_effort"] = "max"
+                    payload["max_tokens"] = 16384
+                elif model_name == "nvidia/nemotron-3.5-lightning-30b-a3b":
+                    payload["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}, "reasoning_budget": 16384}
+                    payload["max_tokens"] = 16384
+                elif model_name == "nvidia/nemotron-3-ultra-550b-a55b":
+                    payload["extra_body"] = {"chat_template_kwargs": {"enable_thinking": True}}
+                    payload["max_tokens"] = 16384
+
+                # Execute with tight timeouts (global timeout ensures we don't stall)
+                effective_read = min(self.READ_TIMEOUT, max(2.0, deadline - time.monotonic()))
+
+                response = self._session.post(
+                    invoke_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=(self.CONNECT_TIMEOUT, effective_read),
+                )
+
+                response.raise_for_status()
+                data = response.json()
+                text = data["choices"][0]["message"]["content"].strip()
+
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "SUCCESS"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_success(model_name)
+
+                return self._parse_json(text)
+
+            except _requests_module.exceptions.ConnectTimeout:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "CONNECT_TIMEOUT"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): connect timeout ({self.CONNECT_TIMEOUT}s)")
+                continue
+
+            except _requests_module.exceptions.ReadTimeout:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "READ_TIMEOUT"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): read timeout ({effective_read:.1f}s)")
+                continue
+
+            except _requests_module.exceptions.HTTPError as e:
+                status_code = e.response.status_code if e.response is not None else 0
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": f"HTTP_{status_code}"})
+                self.call_log.append(attempt_record)
+
+                # 401/403 — auth failure; will never succeed with same key
+                if status_code in (401, 403):
+                    self._breaker._failures[model_name] = 999  # permanently skip
+                    _logger.info(f"NVIDIA API ({model_name}): auth failure {status_code} — permanently skipping")
+                else:
+                    self._breaker.record_failure(model_name)
+                    _logger.info(f"NVIDIA API ({model_name}): HTTP {status_code}")
+                continue
+
+            except Exception as e:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "ERROR"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): {e}")
+                continue
+
+        # ---------------------------------------------------------------
+        # 2. Try Gemini (Fallback)
+        # ---------------------------------------------------------------
+        if self.gemini_model and not getattr(self, "_gemini_tripped", False):
+            from google.api_core.exceptions import ResourceExhausted
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                if time.monotonic() > deadline:
+                    _logger.info("--> Logical call deadline exceeded during Gemini fallback loop.")
+                    break
+                    
+                attempt_record = {
+                    "logical_call_id": logical_call_id,
+                    "provider": "gemini",
+                    "model": self.gemini_model_name,
+                    "attempt": attempt + 1,
+                    "start": time.time(),
+                }
+
+                try:
+                    if attempt == 0:
+                        _logger.info("--> NVIDIA APIs exhausted. Using Gemini...")
+                    else:
+                        _logger.info(f"--> Gemini rate limit hit. Retrying ({attempt+1}/{max_retries}) in 10s...")
+                        time.sleep(10.0)
+                        
+                    response = self.gemini_model.generate_content(
+                        full_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            response_mime_type="application/json",
+                        )
+                    )
+                    text = response.text.strip()
+                    if text.startswith("```json"):
+                        text = text[7:-3]
+                    elif text.startswith("```"):
+                        text = text[3:-3]
+
+                    attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "SUCCESS"})
+                    self.call_log.append(attempt_record)
+
+                    return self._parse_json(text)
+                except ResourceExhausted as e:
+                    attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "RATE_LIMITED"})
+                    self.call_log.append(attempt_record)
+                    error_msg = str(e).lower()
+                    if "429" in error_msg and "quota" in error_msg:
+                        _logger.info("Gemini API rate limit exhausted completely (quota). Tripping Gemini breaker.")
+                        self._gemini_tripped = True
+                        break
+                    if attempt == max_retries - 1:
+                        _logger.info(f"Gemini API rate limit exhausted completely: {e}")
+                        self._gemini_tripped = True # FIX: Trip breaker so we don't sleep for 30s every single LLM call for the rest of the audit
+                        break
+                    continue
+                except Exception as e:
+                    attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "ERROR"})
+                    self.call_log.append(attempt_record)
+                    _logger.info(f"Gemini API Error: {e}")
+                    self._gemini_tripped = True # FIX: Trip breaker on unknown errors as well to prevent loops
+                    break
+
+        # ---------------------------------------------------------------
+        # 3. Try OpenRouter (Final Fallback)
+        # ---------------------------------------------------------------
+        import os
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key and not getattr(self, "_openrouter_tripped", False):
+            if time.monotonic() > deadline:
+                _logger.info("--> Logical call deadline exceeded before OpenRouter fallback.")
+            else:
+                _logger.info("--> Trying OpenRouter fallback...")
+                try:
+                    headers = {
+                        "Authorization": f"Bearer {openrouter_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": "openai/gpt-3.5-turbo",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt + "\nPlease respond ONLY with valid JSON."}
+                        ],
+                        "response_format": {"type": "json_object"}
+                    }
+                    
+                    # Use requests.Session with tight socket-level timeouts.
+                    effective_read = self.READ_TIMEOUT
+
+                    response = self._session.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=(self.CONNECT_TIMEOUT, effective_read)
+                    )
+                    
+                    if response.status_code == 200:
+                        content = response.json()["choices"][0]["message"]["content"]
+                        try:
+                            return self._parse_json(content)
+                        except ValueError:
+                            self._openrouter_tripped = True
+                    else:
+                        _logger.info(f"OpenRouter API: HTTP {response.status_code}")
+                        self._openrouter_tripped = True
+                        
+                except Exception as e:
+                    _logger.info(f"OpenRouter API Error: {e}")
+                    self._openrouter_tripped = True
+
+        return {"error": "All LLM providers and fallback models failed due to rate limits or errors.", "status": "FAILED"}
+
+    def get_call_stats(self) -> Dict[str, Any]:
+        """Returns aggregate statistics from the call instrumentation log."""
+        total = len(self.call_log)
+        successes = sum(1 for c in self.call_log if c.get("status") == "SUCCESS")
+        failures = total - successes
+        timeouts = sum(1 for c in self.call_log if "TIMEOUT" in c.get("status", ""))
+        provider_counts: Dict[str, int] = {}
+        for c in self.call_log:
+            p = c.get("provider", "unknown")
+            provider_counts[p] = provider_counts.get(p, 0) + 1
+        return {
+            "total_attempts": total,
+            "successful_attempts": successes,
+            "failed_attempts": failures,
+            "timeouts": timeouts,
+            "provider_breakdown": provider_counts,
+        }
+
+    def _parse_json(self, text: str) -> Dict[str, Any]:
+        """Cleans and parses the text into a JSON object.  Lossless Unicode."""
+        import ast
+        try:
+            if text.startswith("```json"):
+                text = text[7:-3]
+            elif text.startswith("```"):
+                text = text[3:-3]
+            return json.loads(text.strip())
+        except json.JSONDecodeError as e:
+            try:
+                # Attempt to parse python-style dictionary representation (single quotes)
+                result = ast.literal_eval(text.strip())
+                if isinstance(result, dict):
+                    return result
+                raise ValueError("Parsed result is not a dictionary")
+            except Exception:
+                # Log safely - repr() is always ASCII-safe and lossless
+                _logger.info(f"JSON Parse Error: {e}\nRaw text: {text!r}")
+                raise ValueError("Failed to parse JSON")
+
+if __name__ == "__main__":
+    router = LLMRouter()
+    print("LLMRouter initialized.")

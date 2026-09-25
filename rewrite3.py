@@ -1,0 +1,145 @@
+with open('backend/agents/llm_router.py.bak', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+import re
+pattern = re.compile(r'    def generate_json_response\(self, system_prompt: str, user_prompt: str\) -> Dict\[str, Any\]:.*?(?=    def get_call_stats\(self\) -> Dict\[str, Any\]:)', re.DOTALL)
+match = pattern.search(content)
+
+new_func = r"""    def generate_json_response(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        \"\"\"
+        Attempts NVIDIA APIs first using requests.Session with tight socket-
+        level timeouts (no ThreadPoolExecutor, no orphan threads).
+        Limits usage to the primary NVIDIA model only to preserve free-tier quota.
+        \"\"\"
+        import requests as _requests_module   # for exception types
+
+        full_prompt = f"{system_prompt}\n\nUser Input:\n{user_prompt}\n\nPlease respond ONLY with valid JSON."
+        
+        call_start = time.monotonic()
+        deadline = call_start + self.LOGICAL_CALL_DEADLINE_SECONDS
+        logical_call_id = f"llm-{id(self)}-{int(time.monotonic()*1000)}"
+
+        # ---------------------------------------------------------------
+        # 1. Try Primary NVIDIA provider only
+        # ---------------------------------------------------------------
+        invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+        target_model_name = "nvidia/nemotron-3-super-120b-a12b"
+        primary_configs = [p for p in self.nvidia_configs if p["model_name"] == target_model_name]
+        
+        if not primary_configs:
+            _logger.info("--> Primary NVIDIA provider not configured.")
+            return {"error": "PROVIDER_UNAVAILABLE", "status": "FAILED", "message": "NVIDIA provider temporarily unavailable; audit execution paused/failed without exhausting additional providers."}
+            
+        provider = primary_configs[0]
+        api_key = provider["api_key"]
+        model_name = provider["model_name"]
+
+        # Circuit breaker - skip if OPEN
+        if self._breaker.is_tripped(model_name):
+            _logger.info(f"--> Skipping {model_name} (circuit breaker tripped)")
+            return {"error": "PROVIDER_UNAVAILABLE", "status": "FAILED", "message": "NVIDIA provider temporarily unavailable; audit execution paused/failed without exhausting additional providers."}
+
+        # Maximum normal NVIDIA requests: 1 successful OR 1 failed + 1 retry (max 2)
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            if time.monotonic() > deadline:
+                _logger.info("--> Logical call deadline exceeded.")
+                break
+                
+            attempt_record = {
+                "logical_call_id": logical_call_id,
+                "provider": "nvidia",
+                "model": model_name,
+                "attempt": attempt + 1,
+                "start": time.time(),
+            }
+
+            try:
+                _logger.info(f"--> Trying NVIDIA model: {model_name}")
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Accept": "application/json"
+                }
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt + "\n\nPlease respond ONLY with a raw, valid JSON object (no markdown, no backticks, just the {})."}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "stream": False
+                }
+
+                # Execute with tight timeouts (global timeout ensures we don't stall)
+                effective_read = min(self.READ_TIMEOUT, max(2.0, deadline - time.monotonic()))
+
+                response = self._session.post(
+                    invoke_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=(self.CONNECT_TIMEOUT, effective_read),
+                )
+
+                response.raise_for_status()
+                data = response.json()
+                text = data["choices"][0]["message"]["content"].strip()
+
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "SUCCESS"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_success(model_name)
+
+                return self._parse_json(text)
+
+            except _requests_module.exceptions.ConnectTimeout:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "CONNECT_TIMEOUT"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): connect timeout")
+                if attempt < max_attempts - 1:
+                    time.sleep(1.0)
+                continue
+
+            except _requests_module.exceptions.ReadTimeout:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "READ_TIMEOUT"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): read timeout")
+                if attempt < max_attempts - 1:
+                    time.sleep(1.0)
+                continue
+
+            except _requests_module.exceptions.HTTPError as e:
+                status_code = e.response.status_code if e.response is not None else 0
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": f"HTTP_{status_code}"})
+                self.call_log.append(attempt_record)
+
+                # 401/403 - auth failure; will never succeed with same key
+                if status_code in (401, 403):
+                    self._breaker._failures[model_name] = 999  # permanently skip
+                    _logger.info(f"NVIDIA API ({model_name}): auth failure {status_code} - permanently skipping")
+                    break
+                else:
+                    self._breaker.record_failure(model_name)
+                    _logger.info(f"NVIDIA API ({model_name}): HTTP {status_code}")
+                    if attempt < max_attempts - 1:
+                        time.sleep(1.0)
+                continue
+
+            except Exception as e:
+                attempt_record.update({"end": time.time(), "duration": time.time() - attempt_record["start"], "status": "ERROR"})
+                self.call_log.append(attempt_record)
+                self._breaker.record_failure(model_name)
+                _logger.info(f"NVIDIA API ({model_name}): {e}")
+                if attempt < max_attempts - 1:
+                    time.sleep(1.0)
+                continue
+
+        return {"error": "PROVIDER_UNAVAILABLE", "status": "FAILED", "message": "NVIDIA provider temporarily unavailable; audit execution paused/failed without exhausting additional providers."}
+"""
+
+new_content = content[:match.start()] + new_func + content[match.end():]
+with open('backend/agents/llm_router.py', 'w', encoding='utf-8') as f:
+    f.write(new_content)
+print("Done.")

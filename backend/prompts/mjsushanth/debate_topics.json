@@ -1,0 +1,29 @@
+{
+  "topics": [
+    {
+      "id": 1,
+      "topic": "Should genetic engineering of human embryos be permitted?",
+      "category": "ethics"
+    },
+    {
+      "id": 2,
+      "topic": "Is nuclear energy a sustainable solution to climate change?",
+      "category": "environment"
+    },
+    {
+      "id": 3,
+      "topic": "Should social media platforms be responsible for moderating user content?",
+      "category": "technology"
+    },
+    {
+      "id": 4,
+      "topic": "Should higher education be free for all citizens?",
+      "category": "education"
+    },
+    {
+      "id": 5,
+      "topic": "Is universal basic income a viable economic policy?",
+      "category": "economics"
+    }
+  ]
+}
