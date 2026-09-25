@@ -2,6 +2,10 @@ fastapi
 uvicorn
 python-multipart
 pypdf
+pdfplumber
 openai
 google-generativeai
 python-dotenv
+pinecone-client
+requests
+httpx
