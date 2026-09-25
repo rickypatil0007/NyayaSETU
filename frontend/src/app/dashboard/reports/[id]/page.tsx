@@ -133,6 +133,7 @@ export default function ReportPage() {
   const handleDownloadPdf = async () => {
     const html2pdf = (await import('html2pdf.js')).default;
     const element = document.getElementById('report-content');
+    if (!element) return;
     
     const opt: any = {
       margin:       10,
