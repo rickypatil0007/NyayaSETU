@@ -6,6 +6,6 @@ pdfplumber
 openai
 google-generativeai
 python-dotenv
-pinecone-client
+pinecone
 requests
 httpx
