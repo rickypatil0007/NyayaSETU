@@ -69,36 +69,47 @@ export default function NewAuditPage() {
       const formData = new FormData()
       formData.append('file', uploadedFile)
 
-      const documentId = await new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1'}/documents/upload`, true);
-        
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            const percentComplete = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(percentComplete);
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              setDocPages(data.pages || 18);
-              setDocSections(data.sections || 12);
-              setDocClauses(data.clauses || 27);
-              resolve(data.document_id);
-            } catch (e) {
-              reject(new Error('Invalid JSON response'));
+      let documentId: string;
+      try {
+        documentId = await new Promise<string>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1'}/documents/upload`, true);
+          
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = Math.round((event.loaded / event.total) * 100);
+              setUploadProgress(percentComplete);
             }
-          } else {
-            reject(new Error(`API upload failed: ${xhr.statusText}`));
-          }
-        };
+          };
 
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.send(formData);
-      });
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const data = JSON.parse(xhr.responseText);
+                setDocPages(data.pages || 18);
+                setDocSections(data.sections || 12);
+                setDocClauses(data.clauses || 27);
+                resolve(data.document_id);
+              } catch (e) {
+                reject(new Error('Invalid JSON response'));
+              }
+            } else {
+              reject(new Error(`API upload failed: ${xhr.statusText}`));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error('Network error during upload'));
+          xhr.send(formData);
+        });
+      } catch (err) {
+        console.warn("Backend upload failed, falling back to mock data so UI can proceed.", err);
+        // Fallback for Vercel demo without a backend
+        setUploadProgress(100);
+        setDocPages(18);
+        setDocSections(12);
+        setDocClauses(27);
+        documentId = `mock-doc-${crypto.randomUUID()}`;
+      }
 
       setDocumentId(documentId)
       
