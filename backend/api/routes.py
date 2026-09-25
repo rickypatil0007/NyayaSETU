@@ -402,6 +402,38 @@ async def run_audit_stream(audit_id: str, document_id: str):
 def health_check():
     return {"status": "ok"}
 
+@router.get("/debug")
+def debug_env():
+    import os
+    import sys
+    from backend.rag.embeddings import EmbeddingGenerator
+    from backend.rag.pinecone_client import PineconeVectorStore
+    
+    results = {}
+    
+    # Check NVIDIA
+    results["NVIDIA_NEMOTRON_KEY_SET"] = bool(os.environ.get("NVIDIA_NEMOTRON_3_EMBED_1B_API_KEY"))
+    try:
+        embedder = EmbeddingGenerator()
+        vec = embedder.generate_embeddings(["test"])[0]
+        results["NVIDIA_EMBEDDING"] = f"Success, dim={len(vec)}"
+    except Exception as e:
+        results["NVIDIA_EMBEDDING"] = f"Failed: {e}"
+        
+    # Check Pinecone
+    results["PINECONE_API_KEY_SET"] = bool(os.environ.get("PINECONE_API_KEY"))
+    try:
+        pinecone = PineconeVectorStore()
+        if pinecone.index:
+            stats = pinecone.get_index_stats()
+            results["PINECONE_INDEX"] = f"Success, stats={stats}"
+        else:
+            results["PINECONE_INDEX"] = "Failed: self.index is None"
+    except Exception as e:
+        results["PINECONE_INDEX"] = f"Failed: {e}"
+        
+    return results
+
 @router.get("/report/{audit_id}")
 async def get_report(audit_id: str):
     report_file = os.path.join(TEMP_STORAGE_DIR, f"{audit_id}_report.json")
