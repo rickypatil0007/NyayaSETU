@@ -50,6 +50,83 @@ export default function LiveAuditPage() {
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1'
+    
+    // Check if we are on Vercel without a real backend configured
+    const isMockMode = typeof window !== 'undefined' && 
+                       window.location.hostname !== 'localhost' && 
+                       window.location.hostname !== '127.0.0.1' && 
+                       apiUrl.includes('127.0.0.1');
+
+    if (isMockMode) {
+      setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Connected to mock audit engine (Vercel Demo).' }])
+      
+      let isCancelled = false;
+      const simulateEvents = async () => {
+        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+        
+        await delay(1000); if(isCancelled) return;
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: '--- Processing Document ---' }]);
+        
+        await delay(1500); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Knowledge Retrieval' ? { ...s, status: 'RUNNING' } : s));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Retrieving legal evidence...' }]);
+        
+        await delay(2000); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Round 1: Opening' ? { ...s, status: 'RUNNING' } : (s.name === 'Knowledge Retrieval' ? { ...s, status: 'COMPLETED' } : s)));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Reviewer Opening] Identified 3 potential compliance issues.` }]);
+        await delay(1500); if(isCancelled) return;
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Skeptic Opening] Submitted 3 challenges.` }]);
+
+        await delay(2000); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Round 2: Rebuttal' ? { ...s, status: 'RUNNING' } : (s.name === 'Round 1: Opening' ? { ...s, status: 'COMPLETED' } : s)));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Reviewer Rebuttal] Formulated 2 counter-arguments.` }]);
+        await delay(1500); if(isCancelled) return;
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Skeptic Rebuttal] Responded with 2 counter-rebuttals.` }]);
+
+        await delay(2000); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Round 3: Closing' ? { ...s, status: 'RUNNING' } : (s.name === 'Round 2: Rebuttal' ? { ...s, status: 'COMPLETED' } : s)));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Reviewer Closing] Final statements submitted.` }]);
+        await delay(1000); if(isCancelled) return;
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Skeptic Closing] Final statements submitted.` }]);
+
+        await delay(2500); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Supervisor Arbitration' ? { ...s, status: 'RUNNING' } : (s.name === 'Round 3: Closing' ? { ...s, status: 'COMPLETED' } : s)));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Supervisor] Adjudicated 3 findings.` }]);
+        
+        await delay(2000); if(isCancelled) return;
+        setStages(prev => prev.map(s => s.name === 'Final Verdict' ? { ...s, status: 'RUNNING' } : (s.name === 'Supervisor Arbitration' ? { ...s, status: 'COMPLETED' } : s)));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: `[Verdict] COMPLETE` }]);
+
+        await delay(1000); if(isCancelled) return;
+        const mockFindings = [
+          {
+            id: crypto.randomUUID(),
+            issue_description: "Missing explicit consent clause for non-essential cookies",
+            final_risk: "MEDIUM",
+            reviewer_comment: "Assessment: HIGH. Cookie policy fails GDPR standards.",
+            skeptic_comment: "Challenge: Cookie banner technically covers it, but ambiguous.",
+            supervisor_comment: "Final: MEDIUM RISK. Decision: Needs explicit opt-in text.",
+            location: "Page 2 • Auto-Detected",
+            confidence_score: 92,
+            escalated: false,
+            status: "Confirmed",
+            risk_level: "MEDIUM",
+            sources: [{id: 'gdpr-1', title: 'GDPR Art. 7', section: 'Conditions for consent'}]
+          }
+        ];
+        sessionStorage.setItem(`audit_findings_${auditId}`, JSON.stringify(mockFindings));
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Data saved to local session.' }]);
+
+        await delay(1000); if(isCancelled) return;
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Audit stream completed cleanly.' }]);
+        setStages(prev => prev.map(s => s.status !== 'FAILED' ? { ...s, status: 'COMPLETED' } : s));
+        setIsFinished(true);
+      };
+
+      simulateEvents();
+      return () => { isCancelled = true; };
+    }
+
     const eventSource = new EventSource(`${apiUrl}/audit/${auditId}/run?document_id=${documentId}`)
 
     let roundTracker = 1;
@@ -187,9 +264,16 @@ export default function LiveAuditPage() {
       eventSource.close()
     })
 
+    let reconnectAttempts = 0;
     eventSource.onerror = (error) => {
       console.error('SSE Error:', error)
-      setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Live audit connection lost. Reconnecting...' }])
+      reconnectAttempts++;
+      if (reconnectAttempts > 3) {
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Live audit connection lost. Disconnected.' }])
+        eventSource.close();
+      } else {
+        setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Live audit connection lost. Reconnecting...' }])
+      }
     }
 
     return () => {
