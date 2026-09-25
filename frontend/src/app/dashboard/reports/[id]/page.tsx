@@ -134,7 +134,7 @@ export default function ReportPage() {
     const html2pdf = (await import('html2pdf.js')).default;
     const element = document.getElementById('report-content');
     
-    const opt = {
+    const opt: any = {
       margin:       10,
       filename:     `NyayaSETU_Audit_${audit.id || auditId}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
