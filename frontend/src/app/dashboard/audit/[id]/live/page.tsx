@@ -51,11 +51,8 @@ export default function LiveAuditPage() {
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1'
     
-    // Check if we are on Vercel without a real backend configured
-    const isMockMode = typeof window !== 'undefined' && 
-                       window.location.hostname !== 'localhost' && 
-                       window.location.hostname !== '127.0.0.1' && 
-                       apiUrl.includes('127.0.0.1');
+    // If the document upload failed and fell back to a mock doc, we must use the mock audit stream.
+    const isMockMode = documentId && documentId.startsWith('mock-doc-');
 
     if (isMockMode) {
       setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message: 'Connected to mock audit engine (Vercel Demo).' }])
