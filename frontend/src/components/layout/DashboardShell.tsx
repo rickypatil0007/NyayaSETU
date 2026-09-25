@@ -23,9 +23,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex h-screen bg-[#050505] text-foreground font-sans">
+    <div className="flex flex-col md:flex-row h-screen bg-[#050505] text-foreground font-sans overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-white/5 bg-surface/50 flex flex-col animate-slide-in-left">
+      <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/5 bg-surface/50 flex flex-col animate-slide-in-left shrink-0 md:max-h-full">
         <div className="p-6 border-b border-white/5">
           <Link href="/" className="font-serif text-xl tracking-wider uppercase font-semibold hover:text-accent transition-colors">
             NyayaSETU
@@ -33,8 +33,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="text-[10px] font-mono text-muted/40 mt-1 uppercase tracking-widest">Indian Jurisdiction</div>
         </div>
         
-        <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-muted/40 px-3 pt-3 pb-2">Main</div>
+        <nav className="flex-1 p-2 md:p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-y-auto items-center md:items-stretch scrollbar-hide">
+          <div className="hidden md:block text-[10px] font-mono uppercase tracking-widest text-muted/40 px-3 pt-3 pb-2">Main</div>
           {navItems.map((item) => {
             const active = item.exact 
               ? pathname === item.href 
@@ -43,33 +43,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                className={`flex items-center gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded-lg text-sm transition-all whitespace-nowrap ${
                   active
                     ? "bg-accent/10 text-accent font-medium border border-accent/15"
                     : "text-muted hover:text-foreground hover:bg-white/[0.03] border border-transparent"
                 }`}
               >
                 <item.icon size={16} />
-                {item.label}
+                <span className="hidden sm:inline">{item.label}</span>
               </Link>
             );
           })}
           
-          <div className="text-[10px] font-mono uppercase tracking-widest text-muted/40 px-3 pt-6 pb-2">Review</div>
+          <div className="hidden md:block text-[10px] font-mono uppercase tracking-widest text-muted/40 px-3 pt-6 pb-2">Review</div>
           <Link
             href="/dashboard/escalations"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+            className={`flex items-center gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded-lg text-sm transition-all whitespace-nowrap ${
               isActive('/dashboard/escalations')
                 ? "bg-accent/10 text-accent font-medium border border-accent/15"
                 : "text-muted hover:text-foreground hover:bg-white/[0.03] border border-transparent"
             }`}
           >
             <AlertTriangle size={16} />
-            Escalations
+            <span className="hidden sm:inline">Escalations</span>
           </Link>
         </nav>
         
-        <div className="p-3 border-t border-white/5 flex flex-col gap-1">
+        <div className="hidden md:flex p-3 border-t border-white/5 flex-col gap-1">
           <Link
             href="/dashboard/settings"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
@@ -95,7 +95,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-[#050505]">
-        <div className="max-w-6xl mx-auto p-8">{children}</div>
+        <div className="max-w-6xl mx-auto p-4 md:p-8">{children}</div>
       </main>
     </div>
   );

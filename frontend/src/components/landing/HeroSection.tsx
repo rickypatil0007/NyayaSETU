@@ -8,7 +8,7 @@ export default function HeroSection() {
     <section className="relative min-h-[90vh] flex items-center pt-24 pb-12 overflow-hidden border-b border-white/5">
       <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-black/20 z-0" />
       
-      <div className="max-w-[1440px] mx-auto px-8 w-full grid lg:grid-cols-2 gap-16 relative z-10">
+      <div className="max-w-[1440px] mx-auto px-4 md:px-8 w-full grid lg:grid-cols-2 gap-10 md:gap-16 relative z-10">
         
         {/* LEFT NARRATIVE */}
         <div className="flex flex-col justify-center max-w-2xl">
@@ -26,7 +26,7 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl md:text-7xl font-serif tracking-tight leading-[1.05] mb-8"
+            className="text-4xl sm:text-5xl md:text-7xl font-serif tracking-tight leading-[1.05] mb-6 md:mb-8"
           >
             AUDIT CONTRACTS WITH<br/>
             <span className="text-white/60">EVIDENCE, NOT ASSUMPTIONS.</span>
@@ -36,7 +36,7 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-lg md:text-xl text-muted leading-relaxed mb-10 max-w-xl"
+            className="text-base sm:text-lg md:text-xl text-muted leading-relaxed mb-8 md:mb-10 max-w-xl"
           >
             NyayaSetu analyzes legal and regulatory documents using retrieval-grounded evidence and a multi-agent review process built for transparent human oversight.
           </motion.p>
@@ -45,7 +45,7 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-6"
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6"
           >
             <Link href="/login" className="group relative px-6 py-3 bg-white text-black text-sm font-medium rounded-sm overflow-hidden flex items-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98]">
               Start an Audit
