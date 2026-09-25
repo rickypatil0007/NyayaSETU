@@ -1,13 +1,15 @@
+import dynamic from "next/dynamic"
 import Navigation from "@/components/landing/Navigation"
 import HeroSection from "@/components/landing/HeroSection"
-import ProblemSection from "@/components/landing/ProblemSection"
-import WorkflowSection from "@/components/landing/WorkflowSection"
-import EvidenceSection from "@/components/landing/EvidenceSection"
-import MultiAgentSection from "@/components/landing/MultiAgentSection"
-import EscalationSection from "@/components/landing/EscalationSection"
-import ReportSection from "@/components/landing/ReportSection"
-import FooterSection from "@/components/landing/FooterSection"
 import MotionBackground from "@/components/ui/MotionBackground"
+
+const ProblemSection = dynamic(() => import('@/components/landing/ProblemSection'), { ssr: true })
+const WorkflowSection = dynamic(() => import('@/components/landing/WorkflowSection'), { ssr: true })
+const EvidenceSection = dynamic(() => import('@/components/landing/EvidenceSection'), { ssr: true })
+const MultiAgentSection = dynamic(() => import('@/components/landing/MultiAgentSection'), { ssr: true })
+const EscalationSection = dynamic(() => import('@/components/landing/EscalationSection'), { ssr: true })
+const ReportSection = dynamic(() => import('@/components/landing/ReportSection'), { ssr: true })
+const FooterSection = dynamic(() => import('@/components/landing/FooterSection'), { ssr: true })
 
 export default function LandingPage() {
   return (
