@@ -95,8 +95,8 @@ class LLMRouter:
     LOGICAL_CALL_DEADLINE_SECONDS = float(os.environ.get("LLM_CALL_DEADLINE", "420.0"))
 
     # Retry config
-    MAX_RETRIES_PER_KEY = 1
-    BACKOFF_BASE_SECONDS = 1.0  # 1s
+    MAX_RETRIES_PER_KEY = 3
+    BACKOFF_BASE_SECONDS = 2.0  # 2s, 4s, 8s
 
     def __init__(self):
         # NVIDIA setup — use ALL available keys
@@ -161,35 +161,7 @@ class LLMRouter:
         _logger.info(f"[{logical_call_id}] Starting LLM call. {len(nvidia_candidates)} NVIDIA keys available.")
 
         # ================================================================
-        # 1. GEMINI (PRIORITIZED DUE TO OUTAGE)
-        # ================================================================
-        if self.gemini_api_key and genai:
-            for attempt in range(2):
-                if time.monotonic() > deadline:
-                    break
-                try:
-                    _logger.info(f"  --> Trying Gemini (attempt {attempt+1}/2)")
-                    genai.configure(api_key=self.gemini_api_key)
-                    model = genai.GenerativeModel(self.gemini_model_name)
-                    prompt = f"System: {system_prompt}\n\nUser: {user_prompt}\n\nPlease respond ONLY with a raw, valid JSON object."
-                    
-                    start_t = time.time()
-                    resp = model.generate_content(prompt)
-                    duration = time.time() - start_t
-                    
-                    _logger.info(f"    SUCCESS via Gemini in {duration:.1f}s")
-                    return self._parse_json(resp.text)
-                except Exception as e:
-                    errors_collected.append(f"Gemini: {e}")
-                    if "429" in str(e) and attempt < 1:
-                        wait = 5.0
-                        _logger.info(f"    Gemini rate limited. Waiting {wait:.0f}s...")
-                        time.sleep(min(wait, max(1.0, deadline - time.monotonic())))
-                    else:
-                        break
-
-        # ================================================================
-        # 2. TRY EVERY NVIDIA KEY (FALLBACK)
+        # 1. TRY EVERY NVIDIA KEY with retries
         # ================================================================
         invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions"
 
@@ -293,6 +265,34 @@ class LLMRouter:
                 except Exception as e:
                     errors_collected.append(f"{key_name}: {e}")
                     break
+
+        # ================================================================
+        # 2. GEMINI FALLBACK
+        # ================================================================
+        if self.gemini_api_key and genai:
+            for attempt in range(3):
+                if time.monotonic() > deadline:
+                    break
+                try:
+                    _logger.info(f"  --> Trying Gemini fallback (attempt {attempt+1}/3)")
+                    genai.configure(api_key=self.gemini_api_key)
+                    model = genai.GenerativeModel(self.gemini_model_name)
+                    prompt = f"System: {system_prompt}\n\nUser: {user_prompt}\n\nPlease respond ONLY with a raw, valid JSON object."
+                    
+                    start_t = time.time()
+                    resp = model.generate_content(prompt)
+                    duration = time.time() - start_t
+                    
+                    _logger.info(f"    SUCCESS via Gemini in {duration:.1f}s")
+                    return self._parse_json(resp.text)
+                except Exception as e:
+                    errors_collected.append(f"Gemini: {e}")
+                    if "429" in str(e) and attempt < 2:
+                        wait = 15.0 * (attempt + 1)  # 15s, 30s
+                        _logger.info(f"    Gemini rate limited. Waiting {wait:.0f}s...")
+                        time.sleep(min(wait, max(1.0, deadline - time.monotonic())))
+                    else:
+                        break
 
         # ================================================================
         # 3. OPENROUTER FALLBACK
