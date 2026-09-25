@@ -17,7 +17,6 @@ export default function NewAuditPage() {
   const [documentId, setDocumentId] = useState<string | null>(null)
   const [processingState, setProcessingState] = useState(0)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [docPages, setDocPages] = useState<number | null>(null)
   const [docSections, setDocSections] = useState<number | null>(null)
   const [docClauses, setDocClauses] = useState<number | null>(null)
 
@@ -86,7 +85,6 @@ export default function NewAuditPage() {
             if (xhr.status >= 200 && xhr.status < 300) {
               try {
                 const data = JSON.parse(xhr.responseText);
-                setDocPages(data.pages || 18);
                 setDocSections(data.sections || 12);
                 setDocClauses(data.clauses || 27);
                 resolve(data.document_id);
@@ -102,13 +100,7 @@ export default function NewAuditPage() {
           xhr.send(formData);
         });
       } catch (err) {
-        console.warn("Backend upload failed, falling back to mock data so UI can proceed.", err);
-        // Fallback for Vercel demo without a backend
-        setUploadProgress(100);
-        setDocPages(18);
-        setDocSections(12);
-        setDocClauses(27);
-        documentId = `mock-doc-${crypto.randomUUID()}`;
+        throw new Error(`Upload failed. Is the backend running? ${err}`);
       }
 
       setDocumentId(documentId)
@@ -148,7 +140,6 @@ export default function NewAuditPage() {
           owner_id: session?.user?.id || '1fe36e40-5d65-498a-bca0-3c437502f6fc',
           contract_type: auditType,
           report: {
-            pages: docPages || 2,
             clauses_detected: docClauses || 12,
             sections: docSections || 5
           }
@@ -261,10 +252,6 @@ export default function NewAuditPage() {
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-primary/30 transition-colors">
-                        <p className="text-xs text-muted font-mono uppercase tracking-wider mb-1">Pages</p>
-                        <p className="text-white font-medium text-lg">{docPages || 18}</p>
-                      </div>
                       <div className="bg-black/50 p-4 rounded-xl border border-white/5 hover:border-primary/30 transition-colors">
                         <p className="text-xs text-muted font-mono uppercase tracking-wider mb-1">Sections</p>
                         <p className="text-white font-medium text-lg">{docSections || 12}</p>
