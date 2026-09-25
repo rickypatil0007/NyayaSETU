@@ -100,10 +100,11 @@ class AuditOrchestrator:
         
         # 2. Embedding
         try:
-            query_vector = await asyncio.wait_for(
-                asyncio.to_thread(self.embedding_generator.generate_embedding, search_query),
+            query_vectors = await asyncio.wait_for(
+                asyncio.to_thread(self.embedding_generator.generate_embeddings, [search_query]),
                 timeout=30.0
             )
+            query_vector = query_vectors[0]
         except Exception as e:
             _logger.error(f"Embedding generation failed: {e}")
             return []
