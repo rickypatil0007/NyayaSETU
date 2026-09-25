@@ -56,7 +56,7 @@ export default function NewAuditPage() {
       const fileName = `${crypto.randomUUID()}.${fileExt}`
       
       // Mock successful upload
-      const uploadError = null;
+      const uploadError: any = null;
 
       if (uploadError) {
         throw new Error(`Supabase upload failed: ${uploadError.message}`)
