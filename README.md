@@ -204,6 +204,18 @@ NyayaSETU incorporates a robust `LLMRouter` designed to prevent pipeline failure
 
 ---
 
+## 🌍 Deployment
+
+NyayaSETU is fully deployed and accessible over the web, utilizing a decoupled architecture:
+
+- **Frontend Hosting (Vercel):** The Next.js 14 frontend is deployed on Vercel for fast, edge-cached content delivery and seamless continuous integration. 
+  - URL: [https://nyaya-setu-liard.vercel.app](https://nyaya-setu-liard.vercel.app)
+- **Backend Hosting (Render):** The FastAPI Python backend, which orchestrates the complex multi-agent RAG pipeline, is deployed as a Web Service on Render.
+  - URL: `https://nyayasetu-api-f0w3.onrender.com/api/v1`
+- **Database (Supabase):** PostgreSQL database and authentication are hosted on Supabase.
+
+---
+
 ## 💻 Local Development Setup
 
 ### 1. Backend
