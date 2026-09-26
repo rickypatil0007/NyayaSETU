@@ -151,6 +151,9 @@ class AuditOrchestrator:
         evidence_raw.sort(key=lambda x: calculate_hybrid_score(x, legal_issues), reverse=True)
         evidence_raw = evidence_raw[:15] # Broader context for whole document
         
+        if not audit_date:
+            audit_date = "2026-09-16"
+            
         # 4. Temporal Filter & Status Gate
         evidence = []
         for e in evidence_raw:
@@ -207,7 +210,9 @@ class AuditOrchestrator:
         """
         import asyncio
         doc_context = doc_context or {}
-        audit_date = doc_context.get("effective_date", "2026-09-16")
+        audit_date = doc_context.get("effective_date")
+        if not audit_date:
+            audit_date = "2026-09-16"
         
         # 1. Retrieval
         yield "event: state\ndata: RETRIEVING_EVIDENCE\n\n"
